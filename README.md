@@ -70,7 +70,10 @@ good, because there are some cool tricks you can do with it.
 
 To be able to connect via the spicy/spicec client, you must also set a
 passphrase to the network connection. Using spicy you can pass through
-your local USB devices to the VM just like they are connected.
+your local USB devices to the VM just like they are connected. To install
+the spice client, install the spice-client-gtk package
+
+    $ sudo apt-get install spice-client-gtk
 
 
 Encrypted Disk Images

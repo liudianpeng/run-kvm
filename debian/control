@@ -8,6 +8,7 @@ Standards-Version: 3.6.1
 Package: run-kvm
 Architecture: all
 Pre-Depends: debconf
-Depends: qemu-kvm, qemu-utils
+Depends: qemu-kvm, qemu-utils, bridge-utils, 
+Suggests: spice-client-gtk
 Description: Simple kvm wrapper to run VMs
  A simple kvm wrapper to run VMs, including creating disks and using the spicy client
