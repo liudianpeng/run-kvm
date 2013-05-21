@@ -1,0 +1,13 @@
+Source: run-kvm
+Section: misc
+Priority: optional
+Maintainer: Anthony Awtrey <tony@awtrey.com>
+Build-Depends: debhelper (>= 4.0.0)
+Standards-Version: 3.6.1
+
+Package: run-kvm
+Architecture: all
+Pre-Depends: debconf
+Depends: qemu-kvm, qemu-utils
+Description: Simple kvm wrapper to run VMs
+ A simple kvm wrapper to run VMs, including creating disks and using the spicy client

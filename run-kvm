@@ -1,0 +1,184 @@
+#!/bin/sh
+
+PROGNAME=`basename $0`
+CPU="phenom" # Run "kvm -cpu ?" for a complete list
+SMP="2"      # Number of cores to provide to guest
+MEM="4096"   # The amount of ram in megabytes ( 4096M = 4G )
+
+USBBUS=""
+USBBUS_FILE="ich9-ehci-uhci.cfg"
+if [ -f "/usr/share/run-kvm/${USBBUS_FILE}" ]; then
+  USBBUS="/usr/share/run-kvm/${USBBUS_FILE}"
+fi
+if [ -f "./${USBBUS_FILE}" ]; then
+  USBBUS="./${USBBUS_FILE}"
+fi
+if [ -z "${USBBUS}" ]; then
+  echo >&2 "Unable to find USB bus definition file ich9-ehci-uhci.cfg"
+  exit 1
+fi
+echo ${USBBUS}
+exit
+
+if ! /sbin/route -n | grep "^0.0.0.0" | grep -q "br0$"; then
+  echo >&2 "You must have a bridged network interface"
+  echo >&2 "See this link for more information:"
+  echo >&2 "  http://wiki.debian.org/BridgeNetworkConnections"
+  exit 1
+fi
+
+QEMUIMG="/usr/bin/qemu-img"
+if [ ! -x ${QEMUIMG} ]; then
+  echo >&2 "Please install qemu-utils or I can't create disk images"
+  exit 1
+fi
+
+usage() {
+  echo >&2 "Usage: $PROGNAME -b (n|c|d) -c cdrom.iso /path/to/disk.img";
+  echo >&2 "  -b Boot from network (n), disk (c) or cdrom (d)"
+  echo >&2 "  -c cdrom.iso is the cdrom iso image to use"
+  echo >&2 "  /path/to/disk.img is the disk image to use"
+  echo >&2 "    NOTE: If the disk image doesn't exist, you will be prompted"
+  echo >&2 "    to specify the size to create one."
+  if [ "$1" ]; then
+    echo >&2 ""
+    echo >&2 "Error: $1"
+  fi
+  exit 1
+}
+
+make_image() {
+  DISK_IMAGE=$1
+
+  while true; do
+    DONE=0
+
+    echo >&2 ""
+    echo >&2 "I did not find the disk image you mentioned, so I'll create it"
+    echo >&2 "for you, OK?"
+    echo >&2 ""
+    echo >&2 "Enter the size of the disk image to create in gigabytes, or"
+    echo >&2 "press CTRL-C to exit:"
+    read size_in_gigs
+
+    if ! `echo ${size_in_gigs} | grep -E -q '^[0-9]+$'`; then
+      echo >&2 "Numeric argument required"
+      DONE=1
+    fi
+
+    if [ $size_in_gigs -eq 0 ]; then
+      echo >&2 "Numeric argument must be greater than 0"
+      DONE=1
+    fi
+
+    if [ $DONE -eq 0 ]; then
+      break
+    fi
+
+  done
+
+  ${QEMUIMG} create -f qcow2 ${DISK_IMAGE} ${size_in_gigs}G || usage "Cannot create disk image ${DISK_IMAGE}"
+}
+
+optargs=":b:c:"
+
+if ( ! getopts $optargs opt ); then
+  usage
+fi
+
+BOOT_OPTION="-boot c"
+CDROM_ISO=""
+while getopts $optargs opt; do
+  case $opt in
+    b)
+      if [ $OPTARG = "n" ]; then
+        BOOT_OPTION="-boot $OPTARG"
+      elif [ $OPTARG = "c" ]; then
+        BOOT_OPTION="-boot $OPTARG"
+      elif [ $OPTARG = "d" ]; then
+        BOOT_OPTION="-boot $OPTARG"
+      else
+        usage "Unknown boot method."
+      fi
+      ;;
+    c)
+      if [ ! -f $OPTARG ]; then
+        usage "CDROM iso image does not exist."
+      fi
+      CDROM_ISO="-cdrom $OPTARG"
+      ;;
+    \?)
+      usage "Invalid option: -$OPTARG" 
+      ;;
+    :)
+      usage "Option -$OPTARG requires an argument."
+      ;;
+  esac
+done
+
+# Remove the previously processed options
+shift $(($OPTIND - 1))
+
+# We should have one option left... the disk image
+if [ $# -eq 0 ]; then
+  usage "Disk image is a required argument."
+fi
+
+# We have an argument, do we have a disk? If not,
+# then try to make on
+DISK_IMAGE="$1"
+if [ ! -f ${DISK_IMAGE} ]; then
+  make_image ${DISK_IMAGE}
+fi
+
+MACADDR_FILE="${DISK_IMAGE}.mac"
+if [ ! -e ${MACADDR_FILE} ]; then
+  MACADDR="52:54:$(dd if=/dev/urandom count=1 2>/dev/null | md5sum | sed 's/^\(..\)\(..\)\(..\)\(..\).*$/\1:\2:\3:\4/')"
+  echo ${MACADDR} > ${MACADDR_FILE} || usage "Cannot create ${MACADDR_FILE}"
+  echo "MAC Address generated: ${MACADDR}"
+  echo "If you wish to change it, it is stored as ${MACADDR_FILE}"
+fi
+MACADDR=`cat ${MACADDR_FILE}`
+
+# Find a free vnc port
+PORT=""
+for i in `seq 5900 5930`; do
+   OUTPUT=`netstat -lnt | grep -v tcp6 | grep ":${i}"`
+   if [ -z "${OUTPUT}" ]; then
+     PORT="${i}"
+     break
+   fi
+done
+if [ -z "${PORT}" ]; then
+  echo >&2 "Unable to find a free port to run the spice listener on."
+  exit 1
+fi
+
+echo "Running KVM in bridged mode with MAC address ${MACADDR}"
+echo "The Spice port will be ${PORT}"
+sudo kvm \
+         -cpu ${CPU} \
+         -smp ${SMP} \
+         -m ${MEM} \
+         -drive file=${DISK_IMAGE} \
+         ${CDROM_ISO} \
+         ${BOOT_OPTION} \
+         -net nic,macaddr=${MACADDR} \
+         -net tap \
+         -usb \
+         -device usb-tablet \
+         -monitor stdio \
+         -vga qxl \
+         -global qxl-vga.vram_size=67108864 \
+         -spice port=${PORT} \
+         -readconfig ${USBBUS} \
+         -chardev spicevmc,name=usbredir,id=usbredirchardev1 \
+         -device usb-redir,chardev=usbredirchardev1,id=usbredirdev1,debug=3 \
+         -chardev spicevmc,name=usbredir,id=usbredirchardev2 \
+         -device usb-redir,chardev=usbredirchardev2,id=usbredirdev2,debug=3 \
+         -chardev spicevmc,name=usbredir,id=usbredirchardev3 \
+         -device usb-redir,chardev=usbredirchardev3,id=usbredirdev3,debug=3
+
+#         -spice port=5900,disable-ticketing \
+
+# End

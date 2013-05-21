@@ -1,0 +1,6 @@
+run-kvm for Debian
+------------------
+
+ A simple kvm wrapper to run VMs, including creating disks and using the spicy client
+
+ -- Anthony Awtrey <tony@awtrey.com>, Mon, 20 May 2013 22:20:00 -0500
