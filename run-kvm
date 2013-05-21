@@ -17,8 +17,6 @@ if [ -z "${USBBUS}" ]; then
   echo >&2 "Unable to find USB bus definition file ich9-ehci-uhci.cfg"
   exit 1
 fi
-echo ${USBBUS}
-exit
 
 if ! /sbin/route -n | grep "^0.0.0.0" | grep -q "br0$"; then
   echo >&2 "You must have a bridged network interface"
