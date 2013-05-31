@@ -3,11 +3,11 @@ RUN-KVM
 
 This is a helper utility that automates the creation of disk images and the
 launch of kvm virtual machines. It isn't perfect, but I can't seem to remember
-all the complicated command-line parameters and definately don't want the
+all the complicated command-line parameters and definitely don't want the
 complexity of libvirt.
 
 It is as simple as I could make it and assumes you have a relatively modern
-load like Debian 7.0 (Wheezy) or equivilent. You will also need to have your
+load like Debian 7.0 (Wheezy) or equivalent. You will also need to have your
 box configured to use a bridge even if you only have one active network
 interface. See this page for how to do it:
 
